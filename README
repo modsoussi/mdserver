@@ -1,0 +1,5 @@
+MDServer is a webserver that accepts GET and HEAD requests. Built completely in C, it makes use of libraries such as **socket.h,
+arpa/inet.h,** and others. You can view which libraries were used in the source files. This was project #1 for CS339: Distributed Systems
+at Williams College.
+
+(c) 2016. modsoussi.
