@@ -1,5 +1,5 @@
 /* Initial attempt at implementing a simple http server. 
- * (c) 2016. modsoussi. Danny Smith.
+ * (c) 2016. modsoussi. 
  */
 
 #ifndef MDSERVER_H
@@ -13,7 +13,6 @@
 
 /* MACROS */
 
-#define MAX_PENDING 5
 #define MAX_LINE 8192
 #define SERVER "mdserver/1.0"
 #define SUCCESS 0
