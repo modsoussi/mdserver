@@ -13,6 +13,7 @@
 
 /* MACROS */
 
+#define MAX_PENDING 10
 #define MAX_LINE 8192
 #define SERVER "mdserver/1.0"
 #define SUCCESS 0
