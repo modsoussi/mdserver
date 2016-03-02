@@ -1,5 +1,5 @@
 /* A webserver. Project 1: Distributed S16. 
- * (c) 2016. modsoussi. Danny Smith
+ * (c) 2016. modsoussi.
  *
  *  Comments:
  *		+ Program assumes existence of files called notfound.html, nohostheader.html, malformed.html, forbidden.html
