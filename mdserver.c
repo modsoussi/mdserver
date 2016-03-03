@@ -320,6 +320,8 @@ int main(int argc, char **argv){
     exit(FAILURE);
   }
   
+  memset(&sin_addr, 0, sizeof(struct sockaddr_in));
+  
   if((listen(sin, MAX_PENDING)) < 0){ 
     perror("mdserver-error: socket unable to listen:");
     exit(FAILURE);
@@ -328,7 +330,7 @@ int main(int argc, char **argv){
   
   /* main loop */
   while(1){
-    socklen_t sout_len = 0;
+    socklen_t sout_len;
     
     /* collecting terminated children */
     int status;
@@ -338,10 +340,12 @@ int main(int argc, char **argv){
     } while( w > 0);
 
     /* blocking accept system call */
-    if((sout = accept(sin, (struct sockaddr *)&sin_addr, &sout_len)) < 0){
-	perror("mdserver-error: Failed to accept");
-	exit(FAILURE);
+	struct sockaddr_in sout_addr;
+    if((sout = accept(sin, (struct sockaddr *)&sout_addr, &sout_len)) < 0){
+		perror("mdserver-error: Failed to accept");
+		exit(FAILURE);
     }
+	
     if(*numcon < MAXCON){ /* making sure server is not flooded */
       (*numcon)++;
     } else { /* if maxconn is reached, send 503 and close connection */
@@ -371,9 +375,8 @@ int main(int argc, char **argv){
     }
     
     if(pid == 0){ /* child process work */
-      struct in_addr in = sin_addr.sin_addr;
-      printf("mdserver: Accepted connection from %s\n", inet_ntoa(in)); /* this doesn't work. dunno why. */
-      printf("mdserver: current number of connections is %d\n", *numcon);    
+		printf("mdserver: Accepted connection from %s\n", inet_ntoa(sout_addr.sin_addr)); /* this doesn't work. dunno why. */
+     	printf("mdserver: current number of connections is %d\n", *numcon);    
       
       req_hdrs_t hdrs;
       
@@ -392,7 +395,7 @@ int main(int argc, char **argv){
       /* if out of loop, close connection and exit child process */
       close(sout);
       (*numcon)--;
-      printf("mdserver: closed connection from %s\n", inet_ntoa(in));
+      printf("mdserver: closed connection from %s\n", inet_ntoa(sout_addr.sin_addr));
       printf("mdserver: number of connections now %d\n", *numcon);
       exit(SUCCESS);
     } else { /* main process work */
