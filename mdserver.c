@@ -1,5 +1,5 @@
 /* A webserver. Project 1: Distributed S16. 
- * (c) 2016. modsoussi.
+ * (c) 2016. modsoussi. danny smith.
  *
  *  Comments:
  *		+ Program assumes existence of files called notfound.html, nohostheader.html, malformed.html, forbidden.html
@@ -29,8 +29,11 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <semaphore.h>
 
 static char DEFAULT_PATH[MAX_PATH_LENGTH]; /* working directory */
+sem_t *sem; /* semaphore */
+int *numcon;
 
 /* parsing HTTP requests */
 int req_headers(char *buf, req_hdrs_t *hdrs){
@@ -195,6 +198,10 @@ void req_handle(int sd, req_hdrs_t *req_hdrs){
   if(!(f = fopen(req_hdrs->path, "r"))){
     perror("mdserver-error: couldn't open requested resource");
     fclose(f);
+	close(sd); /* not a fan of closing connection at almost every error. but for now it is what it is. */
+	sem_wait(sem);
+	*(numcon)--;
+	sem_post(sem);
     exit(FAILURE);
   }
   
@@ -202,6 +209,10 @@ void req_handle(int sd, req_hdrs_t *req_hdrs){
   long fsize;
   if((fseek(f, 0, SEEK_END)) < 0){
     perror("mdserver-error: fseek");
+	close(sd);
+	sem_wait(sem);
+	*(numcon)--;
+	sem_post(sem);
     exit(FAILURE);
   } else {
     fsize = ftell(f);
@@ -214,6 +225,9 @@ void req_handle(int sd, req_hdrs_t *req_hdrs){
   if((send(sd, resp, (size_t)strlen(resp), 0)) < 0){
     perror("mdserver-error: send");
     close(sd);
+	sem_wait(sem);
+	*(numcon)--;
+	sem_post(sem);
     exit(FAILURE);
   }
   printf("mdserver: Response Sent: \n%s\n", resp);
@@ -225,6 +239,10 @@ void req_handle(int sd, req_hdrs_t *req_hdrs){
     if((fseek(f, 0, SEEK_SET)) < 0){
       perror("mdserver-error: fseek");
       fclose(f);
+	  close(sd);
+	  sem_wait(sem);
+	  *(numcon)--;
+	  sem_post(sem);
       exit(FAILURE);
     }
     bzero(resp, (size_t)MAX_LINE);
@@ -232,9 +250,12 @@ void req_handle(int sd, req_hdrs_t *req_hdrs){
     while(!feof(f)){
       fread(resp, 1, (size_t)MAX_LINE, f);
       if((bytes_sent += write(sd, resp, (bytes_sent + MAX_LINE) > fsize ? fsize % MAX_LINE : MAX_LINE)) < 0){
-	perror("mdserver-error: writing to socket");
-	close(sd);
-	exit(FAILURE);
+		perror("mdserver-error: writing to socket");
+		close(sd);
+		sem_wait(sem);
+		*(numcon)--;
+		sem_post(sem);
+		exit(FAILURE);
       }
       memset(resp, 0 , (size_t)MAX_LINE);
     }
@@ -255,8 +276,7 @@ int main(int argc, char **argv){
   char buf[MAX_LINE]; /* buffer */
   struct sockaddr_in sin_addr; /* s_in is server's address, s_out is client's address */
   int opts; /* getopt_long helper */
-  int *numcon;
-
+  
   /* shared memory declarations */
   const char *shmname = "NUMCON";
   int shmfd; /* shared memory file descriptor */
@@ -273,6 +293,13 @@ int main(int argc, char **argv){
   *numcon = 0; /* initializing number of connections to 0 */
   
   memset(DEFAULT_PATH, 0, MAX_PATH_LENGTH); /* zeroing out DEFAULT_PATH buffer */
+  
+  /* initializing semaphore + declarations */
+  const char *semname = "mdserver-semaphore";
+  if((sem = sem_open(semname, O_CREAT, 0666, 1)) < 0){
+	  perror("mdserver-error: could not initialize semaphore");
+	  exit(FAILURE);
+  }
   
   /* checking the program was called with the right options */
   if(argc < 5){
@@ -346,14 +373,19 @@ int main(int argc, char **argv){
 		exit(FAILURE);
     }
 	
+	
     if(*numcon < MAXCON){ /* making sure server is not flooded */
-      (*numcon)++;
+		sem_wait(sem); /* wait for semaphore */
+		(*numcon)++;
+		sem_post(sem);
     } else { /* if maxconn is reached, send 503 and close connection */
       memset(buf, 0, sizeof(buf));
       sprintf(buf, "HTTP/1.1 503 Service Unavailable\r\nServer: %s\r\n\n", SERVER);
       write(sout, buf, strlen(buf)); 
       close(sout);
+	  sem_wait(sem);
       (*numcon)--;
+	  sem_post(sem);
       continue;
     }    
     
@@ -394,7 +426,9 @@ int main(int argc, char **argv){
       
       /* if out of loop, close connection and exit child process */
       close(sout);
+	  sem_wait(sem);
       (*numcon)--;
+	  sem_post(sem);
       printf("mdserver: closed connection from %s\n", inet_ntoa(sout_addr.sin_addr));
       printf("mdserver: number of connections now %d\n", *numcon);
       exit(SUCCESS);
